@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocean Currents &amp; Gyres — Find It on the Map</title>
+<style>
+  :root{
+    --deep:#0E2A3C; --land:#E6DFCE; --arrow:#F0A93B;
+    --dotfill:#3FD07E; --ink:#EAF2F6; --dim:#93B6C9; --rule:#33637F;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--deep);color:var(--ink);
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    overflow:hidden;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #stage{position:fixed;inset:0;display:flex;flex-direction:column}
+
+  header{flex:0 0 auto;padding:13px 16px 7px;display:flex;justify-content:center;position:relative;z-index:3}
+  #panel{
+    background:#F4EEDF;border:1px solid #C6BBA0;border-radius:3px;
+    padding:10px 22px 9px;max-width:min(700px,94vw);text-align:center;
+    box-shadow:0 6px 26px rgba(0,0,0,.35);
+  }
+  #ask{
+    font-family:Georgia,"Times New Roman",serif;font-style:italic;
+    font-size:clamp(17px,2.9vw,28px);line-height:1.2;margin:0;color:#14384F;
+  }
+  #sub{margin:5px 0 0;font-size:12.5px;color:#6C8494}
+
+  #wrap{flex:1 1 auto;position:relative;min-height:0}
+  canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  canvas#c.grabbing{cursor:grabbing}
+  canvas#c.target{cursor:pointer}
+  canvas#c:focus-visible{outline:2px solid #FFCE7A;outline-offset:-3px}
+
+  footer{
+    flex:0 0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:9px 18px 14px;font-size:13px;position:relative;z-index:3;
+  }
+  #score{font-variant-numeric:tabular-nums;color:var(--dim)}
+  #score strong{color:var(--ink);font-weight:600}
+  .spacer{flex:1 1 auto}
+  label.tog{display:inline-flex;align-items:center;gap:7px;color:var(--dim);cursor:pointer}
+  label.tog input{accent-color:#F0A93B;width:15px;height:15px;cursor:pointer}
+  button{
+    font:inherit;color:var(--ink);background:transparent;
+    border:1px solid var(--rule);border-radius:2px;padding:6px 13px;cursor:pointer;
+  }
+  button:hover{background:#173C53;border-color:#5A90AE}
+  button:focus-visible,label.tog input:focus-visible{outline:2px solid #FFCE7A;outline-offset:2px}
+
+  /* colour wash over the map, map still readable */
+  #flash{position:fixed;inset:0;z-index:8;pointer-events:none;opacity:0;transition:opacity .15s ease-out}
+  #flash.on{opacity:1}
+  #flash.good{background:rgba(26,150,100,.3)}
+  #flash.bad{background:rgba(205,58,42,.32)}
+
+  #fx{position:fixed;inset:0;z-index:9;pointer-events:none}
+
+  #modal{
+    position:fixed;inset:0;z-index:11;display:none;
+    align-items:flex-end;justify-content:center;padding:20px 20px 5vh;
+  }
+  #modal.on{display:flex}
+  #card{
+    border-radius:4px;padding:26px 30px 22px;text-align:center;
+    max-width:min(460px,92vw);box-shadow:0 16px 50px rgba(0,0,0,.5);
+  }
+  #modal.bad #card{background:#B4291A;border:1px solid #E4705F}
+  #modal.good #card{background:#F4EEDF;border:1px solid #C6BBA0}
+  #headline{
+    font-family:Georgia,"Times New Roman",serif;font-style:italic;
+    font-size:clamp(26px,5vw,42px);margin:0;line-height:1.1;
+  }
+  #modal.bad #headline{color:#fff;font-style:normal;letter-spacing:.06em;font-weight:bold}
+  #modal.good #headline{color:#14384F}
+  #note{margin:9px 0 18px;font-size:14px}
+  #modal.bad #note{color:#FFD9D2}
+  #modal.good #note{color:#5C7688}
+  #acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  #modal.bad #acts button{color:#fff;border-color:rgba(255,255,255,.6)}
+  #modal.bad #acts button:hover{background:rgba(255,255,255,.15)}
+  #modal.good #acts button{color:#14384F;border-color:#B3A78C}
+  #modal.good #acts button:hover{background:#E6DDC7}
+
+  @media (prefers-reduced-motion:reduce){#flash{transition:none}}
+  @media (max-width:560px){
+    header{padding:10px 12px 6px}
+    #panel{padding:9px 15px 8px}
+    footer{padding:8px 12px 11px;gap:10px;font-size:12px}
+    button{padding:6px 10px}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div id="panel">
+      <p id="ask">Loading</p>
+      <p id="sub">&nbsp;</p>
+    </div>
+  </header>
+  <div id="wrap"><canvas id="c" tabindex="0" aria-label="Map of ocean currents. Drag or use arrow keys to move it."></canvas></div>
+  <footer>
+    <span id="score"><strong>0</strong> sets cleared</span>
+    <span class="spacer"></span>
+    <button id="mode">Flat map</button>
+    <label class="tog"><input type="checkbox" id="tlabel"> Names</label>
+    <button id="bnext">Next set</button>
+    <button id="brand">Random set</button>
+  </footer>
+</div>
+<div id="flash"></div>
+<canvas id="fx"></canvas>
+<div id="modal">
+  <div id="card">
+    <p id="headline"></p>
+    <p id="note"></p>
+    <div id="acts">
+      <button id="mnext">Next set</button>
+      <button id="mrand">Random set</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const LAND = [[[-180.0,69.0],[-174.3,66.3],[-174.6,67.1],[-171.9,66.9],[-169.9,66.0],[-172.5,65.4],[-173.0,64.3],[-179.9,65.9],[-180.0,65.0],[180.0,65.0],[177.4,64.6],[179.2,62.3],[173.7,61.7],[170.3,59.9],[168.9,60.6],[163.5,59.9],[162.0,58.2],[163.2,57.6],[162.1,54.9],[160.4,54.3],[160.0,53.2],[158.5,53.0],[156.8,51.0],[155.4,55.4],[155.9,56.8],[163.7,61.1],[164.5,62.6],[160.1,60.5],[159.3,61.8],[156.7,61.4],[154.2,59.8],[155.0,59.1],[151.3,58.8],[151.3,59.5],[149.8,59.7],[142.2,59.0],[135.1,54.7],[138.2,53.8],[139.9,54.2],[141.4,52.2],[140.1,48.4],[138.2,46.3],[134.9,43.4],[132.3,43.3],[127.5,39.8],[129.5,36.8],[129.1,35.1],[126.5,34.4],[126.1,36.7],[126.9,36.9],[124.7,38.1],[125.3,39.6],[121.1,38.9],[122.2,40.4],[121.6,40.9],[118.0,39.2],[117.5,38.7],[118.9,37.4],[122.4,37.5],[119.2,34.9],[121.9,31.7],[121.3,30.7],[122.1,29.8],[121.7,28.2],[118.7,24.5],[115.9,22.8],[110.8,21.4],[110.4,20.3],[108.5,21.7],[105.9,19.8],[109.3,13.4],[109.2,11.7],[105.2,8.6],[105.1,9.9],[100.1,13.4],[99.2,9.2],[103.0,5.5],[104.2,1.3],[101.4,2.8],[100.1,6.5],[98.5,8.4],[98.3,7.8],[98.8,11.4],[97.2,16.9],[95.4,15.7],[94.2,16.0],[94.3,18.2],[91.4,22.8],[90.5,22.8],[90.3,21.8],[87.0,21.5],[86.5,20.2],[80.3,15.9],[79.9,10.4],[77.5,8.0],[73.5,16.0],[72.6,21.4],[70.5,20.9],[66.4,25.4],[57.4,25.7],[56.5,27.1],[54.7,26.5],[51.5,27.9],[50.1,30.1],[48.0,30.0],[50.8,24.8],[51.0,26.0],[51.6,25.8],[51.8,24.0],[54.0,24.1],[56.4,26.4],[56.8,24.2],[59.8,22.3],[57.8,20.2],[57.7,18.9],[55.3,17.2],[48.7,14.0],[43.5,12.6],[42.7,16.8],[39.1,21.3],[38.5,23.7],[34.6,28.1],[34.9,29.5],[33.9,27.6],[32.4,29.9],[35.5,23.1],[36.9,22.0],[37.5,18.6],[43.3,12.4],[42.7,11.7],[44.6,10.4],[51.1,12.0],[51.0,10.6],[47.7,4.2],[40.3,-2.6],[39.2,-4.7],[38.8,-6.5],[40.5,-10.8],[40.8,-14.7],[39.5,-16.7],[34.8,-19.8],[35.5,-24.1],[32.6,-25.7],[32.2,-28.8],[28.2,-32.8],[25.8,-33.9],[19.6,-34.8],[18.2,-33.9],[18.2,-31.7],[15.2,-27.1],[14.3,-22.1],[11.8,-18.1],[11.8,-15.8],[13.7,-10.7],[11.9,-5.0],[8.8,-1.1],[9.4,3.7],[8.5,4.8],[5.9,4.3],[4.3,6.3],[-2.0,4.7],[-9.0,4.8],[-12.4,7.3],[-16.6,12.2],[-17.6,14.7],[-16.1,18.1],[-17.0,21.9],[-14.4,26.3],[-9.6,29.9],[-9.3,32.6],[-5.9,35.8],[-2.2,35.2],[1.5,36.6],[9.5,37.4],[11.1,36.9],[10.3,33.8],[19.1,30.3],[20.1,32.2],[21.5,32.8],[28.9,30.9],[31.0,31.6],[33.8,31.0],[36.0,34.6],[36.2,36.7],[27.6,36.7],[26.2,39.5],[29.2,41.2],[33.5,42.0],[38.3,40.9],[41.7,42.0],[36.7,45.2],[39.1,47.3],[35.0,46.3],[36.3,45.1],[33.9,44.4],[32.5,45.3],[33.3,46.1],[30.7,46.6],[27.7,42.6],[28.8,41.1],[26.4,40.2],[24.9,40.9],[23.7,40.7],[23.9,40.0],[22.6,40.3],[24.0,37.7],[23.1,37.9],[23.2,36.4],[22.5,36.4],[19.4,40.3],[19.5,41.7],[13.1,45.7],[12.3,45.4],[12.6,44.1],[18.5,40.2],[16.9,40.4],[17.1,38.9],[16.1,38.0],[15.4,40.0],[8.9,44.4],[6.5,43.1],[3.1,43.1],[3.0,41.9],[0.8,41.0],[0.1,38.7],[-2.1,36.7],[-5.4,35.9],[-6.5,36.9],[-8.9,36.9],[-9.4,43.0],[-1.4,44.0],[-1.2,46.0],[-4.6,48.7],[-1.6,48.6],[-1.9,49.8],[1.3,50.1],[4.7,53.1],[8.1,53.5],[8.8,54.0],[8.1,55.5],[8.5,57.1],[10.6,57.7],[10.9,56.5],[9.6,55.5],[10.9,54.0],[19.7,54.4],[21.3,55.2],[21.6,57.4],[24.1,57.0],[24.4,58.4],[23.3,59.2],[29.1,60.0],[22.9,59.8],[21.3,60.7],[21.5,63.2],[25.4,65.1],[23.9,66.0],[22.2,65.7],[21.4,64.4],[17.8,62.7],[17.1,61.3],[18.8,60.1],[16.8,58.7],[15.9,56.1],[12.9,55.4],[10.4,59.5],[8.4,58.3],[5.7,58.6],[5.0,62.0],[5.9,62.6],[10.5,64.5],[14.8,67.8],[19.2,69.8],[24.5,71.0],[28.2,71.2],[31.3,70.5],[30.0,70.2],[31.1,69.6],[36.5,69.1],[41.1,67.5],[41.1,66.8],[38.4,66.0],[33.2,66.6],[34.8,65.9],[34.9,64.4],[37.0,63.9],[36.5,64.8],[37.2,65.1],[39.6,64.5],[40.4,64.8],[39.8,65.5],[42.1,66.5],[44.0,66.1],[44.5,66.8],[43.5,68.6],[46.3,68.2],[46.8,67.7],[45.6,67.0],[46.3,66.7],[53.7,68.9],[54.5,68.8],[53.5,68.2],[58.8,68.9],[59.9,68.3],[61.1,68.9],[60.0,69.5],[60.6,69.9],[68.5,68.1],[69.2,68.6],[66.9,69.5],[66.7,71.0],[69.2,72.8],[72.6,72.8],[71.8,71.4],[72.8,70.4],[72.6,69.0],[73.7,68.4],[71.3,66.3],[72.4,66.2],[75.1,67.8],[74.9,69.0],[73.6,69.6],[74.4,70.6],[73.1,71.4],[74.9,72.1],[74.7,72.8],[75.7,72.3],[75.3,71.3],[76.4,71.2],[75.9,71.9],[77.6,72.3],[81.5,71.7],[80.5,73.6],[86.8,73.9],[86.0,74.5],[87.2,75.1],[100.8,76.4],[104.4,77.7],[107.2,76.5],[111.1,76.7],[114.1,75.8],[109.4,74.2],[123.2,73.0],[123.3,73.7],[127.0,73.6],[131.3,70.8],[132.3,71.8],[139.9,71.5],[139.1,72.4],[140.5,72.8],[149.5,72.2],[153.0,70.8],[159.0,70.9],[160.9,69.4],[167.8,69.6],[169.6,68.7],[170.8,69.0],[170.0,69.7],[170.5,70.1],[178.6,69.4],[-180.0,69.0]],[[-90.5,69.5],[-90.5,68.5],[-89.2,69.3],[-87.3,67.2],[-85.6,68.8],[-85.5,69.9],[-82.6,69.7],[-81.3,69.2],[-82.0,68.1],[-81.3,67.6],[-83.3,66.4],[-85.8,66.6],[-87.3,64.8],[-93.2,62.0],[-94.7,58.9],[-93.2,58.8],[-92.3,57.1],[-82.3,55.1],[-82.1,53.3],[-79.9,51.2],[-78.6,52.6],[-79.8,54.7],[-76.5,56.5],[-78.5,58.8],[-77.3,59.9],[-78.1,62.3],[-73.8,62.4],[-69.6,61.1],[-69.3,59.0],[-67.7,58.2],[-64.6,60.3],[-61.4,57.0],[-61.8,56.3],[-57.3,54.6],[-55.8,53.3],[-55.7,52.1],[-60.0,50.2],[-66.4,50.2],[-71.1,46.8],[-65.1,49.2],[-64.2,48.7],[-65.1,48.1],[-64.5,46.2],[-61.5,45.9],[-60.5,47.0],[-59.8,45.9],[-65.4,43.5],[-66.2,44.5],[-64.4,45.3],[-67.1,45.1],[-70.7,43.0],[-70.0,41.6],[-73.7,40.9],[-71.9,40.9],[-74.0,40.8],[-74.9,38.9],[-75.5,39.5],[-75.1,38.4],[-75.9,37.2],[-76.4,39.1],[-76.3,38.1],[-77.0,38.2],[-75.7,35.6],[-81.3,31.4],[-80.1,26.9],[-80.4,25.2],[-81.7,25.9],[-84.1,30.1],[-89.2,30.3],[-89.2,29.3],[-90.2,29.1],[-93.8,29.7],[-96.6,28.3],[-97.4,27.4],[-97.9,22.4],[-96.3,19.3],[-94.4,18.1],[-92.0,18.7],[-90.8,19.3],[-90.3,21.0],[-87.1,21.5],[-88.9,15.9],[-83.4,15.3],[-83.8,11.1],[-81.4,8.8],[-79.6,9.6],[-76.8,8.6],[-74.9,11.1],[-71.8,12.4],[-71.1,12.1],[-71.9,11.4],[-71.7,9.1],[-71.4,11.0],[-69.9,12.2],[-68.2,10.6],[-64.9,10.1],[-61.9,10.7],[-62.4,9.9],[-57.1,6.0],[-54.0,5.8],[-51.3,4.2],[-50.0,1.7],[-50.4,-0.1],[-48.6,-0.2],[-48.6,-1.2],[-47.8,-0.6],[-44.9,-1.6],[-44.6,-2.7],[-40.0,-2.9],[-35.6,-5.1],[-34.7,-7.3],[-35.1,-9.0],[-38.7,-13.1],[-39.3,-17.9],[-40.9,-21.9],[-47.6,-24.9],[-48.9,-28.7],[-53.8,-34.4],[-56.2,-34.9],[-58.4,-33.9],[-56.8,-36.9],[-59.2,-38.7],[-62.3,-38.8],[-62.7,-41.0],[-65.1,-41.1],[-65.0,-42.1],[-63.5,-42.6],[-65.2,-43.5],[-65.6,-45.0],[-67.3,-45.6],[-67.6,-46.3],[-65.6,-47.2],[-66.0,-48.1],[-69.1,-50.7],[-68.2,-52.4],[-70.8,-52.9],[-71.0,-53.8],[-74.9,-52.3],[-75.6,-48.7],[-74.1,-46.9],[-75.6,-46.6],[-74.4,-44.1],[-73.2,-44.5],[-72.7,-42.4],[-74.3,-43.2],[-73.2,-39.3],[-73.6,-37.2],[-71.4,-32.4],[-70.2,-19.8],[-71.5,-17.4],[-76.0,-14.6],[-79.8,-7.2],[-81.3,-6.1],[-81.4,-4.7],[-79.8,-2.7],[-81.0,-2.2],[-80.9,-1.1],[-77.1,3.8],[-78.2,8.3],[-79.6,8.9],[-80.9,7.2],[-85.7,9.9],[-87.5,13.3],[-91.2,13.9],[-94.7,16.2],[-96.6,15.7],[-103.5,18.3],[-105.5,19.9],[-106.0,22.8],[-112.2,29.0],[-113.1,31.2],[-114.8,31.8],[-114.7,30.2],[-109.4,23.2],[-110.0,22.8],[-112.2,24.7],[-112.3,26.0],[-115.1,27.7],[-114.2,28.6],[-117.3,33.0],[-120.6,34.6],[-124.4,40.3],[-123.9,45.5],[-124.7,48.2],[-123.1,48.0],[-122.6,47.1],[-122.8,49.0],[-127.4,50.8],[-127.8,52.3],[-129.1,52.8],[-134.1,58.1],[-147.1,60.9],[-151.7,59.2],[-150.6,61.3],[-154.0,59.4],[-153.3,58.9],[-154.2,58.1],[-158.4,56.0],[-164.8,54.4],[-157.7,57.6],[-157.0,58.9],[-162.0,58.7],[-161.9,59.6],[-163.8,59.8],[-166.1,61.5],[-164.6,63.1],[-160.8,63.8],[-161.5,64.4],[-160.8,64.8],[-165.0,64.4],[-168.1,65.7],[-164.5,66.6],[-161.7,66.1],[-166.8,68.4],[-156.6,71.4],[-136.5,68.9],[-128.1,70.5],[-125.8,69.5],[-124.4,70.2],[-124.3,69.4],[-121.5,69.8],[-113.9,68.4],[-115.3,67.9],[-108.9,67.4],[-107.8,67.9],[-108.8,68.3],[-108.2,68.7],[-106.1,68.8],[-101.5,67.6],[-98.4,67.8],[-97.7,68.6],[-96.1,68.2],[-96.1,67.3],[-94.2,69.1],[-96.5,70.1],[-96.4,71.2],[-95.2,71.9],[-91.5,70.2],[-92.4,69.7],[-90.5,69.5]],[[-180.0,-84.7],[-170.0,-83.9],[-158.1,-85.4],[-143.1,-85.0],[-153.6,-83.7],[-152.9,-82.0],[-156.8,-81.1],[-150.6,-81.3],[-146.4,-80.3],[-155.3,-79.1],[-158.1,-78.0],[-158.4,-76.9],[-151.3,-77.4],[-146.1,-76.5],[-146.2,-75.4],[-144.9,-75.2],[-113.9,-73.7],[-112.3,-74.7],[-107.6,-75.2],[-100.1,-74.9],[-102.5,-74.1],[-103.7,-72.6],[-96.3,-73.6],[-90.1,-73.3],[-89.2,-72.6],[-76.2,-74.0],[-68.9,-73.0],[-67.1,-72.0],[-68.5,-69.7],[-67.3,-66.9],[-63.0,-64.6],[-57.8,-63.3],[-57.2,-63.5],[-62.0,-64.8],[-62.6,-65.5],[-62.1,-66.2],[-65.7,-68.0],[-61.8,-70.7],[-60.8,-73.7],[-70.6,-76.6],[-77.2,-76.7],[-73.7,-77.9],[-77.9,-78.4],[-78.0,-79.2],[-58.2,-83.2],[-49.8,-81.7],[-42.8,-82.1],[-28.6,-80.3],[-29.7,-79.3],[-35.6,-79.5],[-35.8,-78.3],[-17.5,-75.1],[-15.7,-74.5],[-16.5,-73.9],[-15.4,-73.1],[-10.3,-71.3],[-7.4,-71.7],[-6.9,-70.9],[-0.2,-71.6],[7.7,-69.9],[10.8,-70.8],[13.4,-70.0],[27.1,-70.5],[32.0,-69.7],[33.9,-68.5],[38.6,-69.8],[54.5,-65.8],[61.4,-68.0],[68.9,-67.9],[69.7,-69.2],[67.8,-70.3],[69.1,-70.7],[67.9,-71.9],[69.9,-72.3],[73.9,-69.9],[77.6,-69.5],[82.8,-67.2],[86.8,-67.1],[88.0,-66.2],[89.7,-67.1],[95.8,-67.4],[99.7,-67.2],[102.8,-65.6],[106.2,-66.9],[113.6,-65.9],[119.8,-67.3],[134.8,-66.2],[135.1,-65.3],[137.5,-67.0],[145.5,-66.9],[148.8,-68.4],[154.3,-68.6],[161.6,-70.6],[171.2,-71.7],[169.3,-73.7],[166.1,-74.4],[163.6,-76.2],[164.7,-78.2],[167.0,-78.8],[161.8,-79.2],[159.8,-80.9],[169.4,-83.8],[178.3,-84.5],[-180.0,-84.7]],[[143.6,-13.8],[145.4,-15.0],[146.4,-19.0],[148.8,-20.4],[153.1,-26.1],[153.1,-30.9],[150.0,-37.4],[146.3,-39.0],[145.0,-37.9],[143.6,-38.8],[140.6,-38.0],[139.6,-36.1],[138.1,-35.6],[138.2,-34.4],[136.8,-35.3],[137.8,-32.9],[136.0,-34.9],[134.3,-32.6],[131.3,-31.5],[126.1,-32.2],[123.7,-33.9],[119.9,-34.0],[118.0,-35.1],[115.0,-34.2],[115.7,-31.6],[113.3,-26.1],[114.2,-26.3],[113.4,-24.4],[114.1,-21.8],[114.2,-22.5],[116.7,-20.7],[120.9,-19.7],[123.0,-16.4],[123.9,-17.1],[123.5,-16.6],[125.7,-14.2],[127.1,-13.8],[129.6,-15.0],[130.6,-12.5],[132.6,-12.1],[131.8,-11.3],[132.4,-11.1],[135.3,-12.2],[136.5,-11.9],[137.0,-12.4],[135.5,-15.0],[140.2,-17.7],[141.3,-16.4],[142.5,-10.7],[143.6,-13.8]],[[-27.1,83.5],[-20.8,82.7],[-31.9,82.2],[-22.1,81.7],[-23.2,81.2],[-15.8,81.9],[-12.2,81.3],[-20.0,80.2],[-17.7,80.1],[-19.7,78.8],[-19.7,77.6],[-18.5,77.0],[-21.7,76.6],[-19.8,76.1],[-19.6,75.2],[-20.7,75.2],[-19.4,74.3],[-23.6,73.3],[-22.3,72.2],[-24.8,72.3],[-21.8,70.7],[-25.5,71.4],[-25.2,70.8],[-26.4,70.2],[-22.3,70.1],[-39.8,65.5],[-42.8,62.7],[-42.4,61.9],[-43.4,60.1],[-48.3,60.9],[-51.6,63.6],[-54.0,67.2],[-50.9,69.9],[-54.7,69.6],[-54.4,70.8],[-51.4,70.6],[-55.8,71.7],[-54.7,72.6],[-58.6,75.5],[-68.5,76.1],[-71.4,77.0],[-66.8,77.4],[-73.3,78.0],[-65.7,79.4],[-68.0,80.1],[-62.2,81.3],[-62.6,81.8],[-50.4,82.4],[-44.5,81.7],[-46.8,82.6],[-38.6,83.5],[-27.1,83.5]],[[-180.0,-16.6],[179.4,-16.8],[178.7,-17.0],[179.4,-16.4],[-180.0,-16.6]],[[-86.6,73.2],[-85.8,72.5],[-82.3,73.8],[-80.6,72.7],[-80.8,72.1],[-77.8,72.8],[-74.1,71.3],[-72.2,71.6],[-67.0,69.2],[-68.8,68.7],[-61.9,66.9],[-63.9,65.0],[-68.0,66.3],[-64.7,63.4],[-65.0,62.7],[-68.8,63.7],[-66.2,61.9],[-74.8,64.7],[-77.7,64.2],[-78.6,64.6],[-77.9,65.3],[-74.0,65.5],[-72.9,67.7],[-79.0,70.2],[-84.9,70.0],[-89.9,71.2],[-89.4,73.1],[-85.8,73.8],[-86.6,73.2]],[[-68.5,83.1],[-61.9,82.6],[-67.7,81.5],[-65.5,81.5],[-71.2,79.8],[-76.9,79.3],[-75.4,78.5],[-79.8,77.2],[-77.9,76.8],[-80.6,76.2],[-89.5,76.5],[-87.8,77.2],[-88.3,77.9],[-85.0,77.5],[-88.0,78.4],[-85.1,79.3],[-86.9,80.3],[-81.8,80.5],[-87.6,80.5],[-91.6,81.9],[-79.3,83.1],[-68.5,83.1]],[[134.1,-1.2],[134.4,-2.8],[135.5,-3.4],[138.3,-1.7],[144.6,-3.9],[147.6,-6.1],[147.2,-7.4],[150.7,-10.6],[147.9,-10.1],[144.7,-7.6],[142.6,-9.3],[139.1,-8.1],[137.6,-8.4],[138.7,-7.3],[137.9,-5.4],[133.7,-3.5],[133.0,-4.1],[132.0,-2.8],[133.7,-2.2],[130.5,-0.9],[132.4,-0.4],[134.1,-1.2]],[[117.9,1.8],[119.0,0.9],[117.8,0.8],[116.1,-4.0],[110.2,-2.9],[109.1,-0.5],[109.7,2.0],[111.2,1.9],[111.4,2.7],[113.0,3.1],[116.7,6.9],[119.2,5.4],[117.3,3.2],[117.9,1.8]],[[-114.2,73.1],[-114.7,72.7],[-109.9,73.0],[-108.2,71.7],[-107.7,72.1],[-108.4,73.1],[-106.5,73.1],[-104.5,71.0],[-101.0,70.0],[-102.7,69.5],[-102.4,68.8],[-113.3,68.5],[-117.3,70.0],[-112.4,70.4],[-117.9,70.5],[-118.4,70.9],[-116.1,71.3],[-119.4,71.6],[-117.9,72.7],[-114.2,73.1]],[[50.1,-13.6],[50.4,-15.7],[49.7,-15.7],[47.1,-24.9],[45.4,-25.6],[44.0,-25.0],[43.3,-22.1],[44.4,-20.1],[44.4,-16.2],[47.7,-14.6],[49.2,-12.0],[50.1,-13.6]],[[49.1,41.3],[50.4,40.3],[48.9,38.8],[49.2,37.6],[53.8,37.0],[53.9,39.0],[52.7,40.0],[52.9,40.9],[54.7,41.0],[53.7,42.1],[52.8,41.1],[52.5,42.8],[50.3,44.6],[53.0,45.3],[53.0,46.9],[49.1,46.4],[46.7,44.6],[49.1,41.3]],[[105.8,-5.9],[102.6,-4.2],[95.3,5.5],[97.5,5.2],[103.8,0.1],[103.4,-0.7],[106.1,-3.1],[105.8,-5.9]],[[-3.0,58.6],[-4.1,57.6],[-2.0,57.7],[-3.1,56.0],[1.7,52.7],[1.4,51.3],[-5.2,50.0],[-5.8,50.2],[-3.4,51.4],[-5.3,52.0],[-4.2,52.3],[-4.6,53.5],[-2.9,54.0],[-4.8,54.8],[-5.0,55.8],[-5.6,55.3],[-6.2,56.8],[-5.0,58.6],[-3.0,58.6]],[[141.0,37.1],[140.3,35.1],[137.2,34.6],[135.8,33.5],[135.1,34.6],[131.0,33.9],[132.0,33.1],[131.3,31.5],[130.2,31.4],[130.4,32.3],[129.4,33.3],[132.6,35.4],[135.7,35.5],[136.7,37.3],[137.4,36.8],[139.4,38.2],[139.9,40.6],[141.4,41.4],[141.9,39.2],[141.0,37.1]],[[57.5,70.7],[53.7,70.8],[51.5,72.0],[55.6,75.1],[66.2,76.8],[68.9,76.5],[58.5,74.3],[55.4,72.4],[57.5,70.7]],[[-14.5,66.5],[-14.7,65.8],[-13.6,65.1],[-18.7,63.5],[-22.8,64.0],[-21.8,64.4],[-24.0,64.9],[-22.2,65.4],[-24.3,65.6],[-22.1,66.4],[-20.6,65.7],[-14.5,66.5]],[[-45.2,-78.0],[-43.9,-78.5],[-43.3,-80.0],[-50.5,-81.0],[-54.2,-80.6],[-48.7,-78.0],[-45.2,-78.0]],[[-120.5,71.4],[-123.1,70.9],[-125.9,71.9],[-123.9,73.7],[-124.9,74.3],[-115.5,73.5],[-119.2,72.5],[-120.5,71.4]],[[-87.0,79.7],[-85.8,79.3],[-90.8,78.2],[-96.7,80.2],[-92.4,81.3],[-87.0,79.7]],[[-94.7,77.1],[-89.2,75.6],[-81.1,75.7],[-79.8,74.9],[-89.8,74.5],[-97.1,76.8],[-94.7,77.1]],[[18.3,79.7],[21.5,79.0],[15.9,76.8],[10.4,79.7],[18.3,79.7]],[[173.0,-40.9],[174.2,-41.3],[173.1,-43.9],[171.5,-44.2],[169.3,-46.6],[166.7,-46.2],[167.0,-45.1],[173.0,-40.9]],[[125.2,1.4],[123.7,0.2],[120.2,0.2],[120.9,-1.4],[123.3,-0.6],[121.5,-1.9],[123.2,-5.3],[122.2,-5.3],[122.7,-4.5],[121.5,-4.6],[121.0,-2.6],[120.3,-2.9],[120.4,-5.5],[119.4,-5.4],[119.5,-3.5],[118.8,-2.8],[120.0,0.6],[120.9,1.3],[125.2,1.4]],[[-56.1,50.7],[-56.8,49.8],[-53.5,49.2],[-53.8,48.5],[-53.1,48.7],[-52.6,47.5],[-53.1,46.7],[-54.2,46.8],[-54.2,47.8],[-55.4,46.9],[-56.3,47.6],[-59.3,47.6],[-57.4,50.7],[-55.4,51.6],[-56.1,50.7]],[[-108.2,76.2],[-105.7,75.5],[-112.2,74.4],[-113.9,74.7],[-111.8,75.2],[-117.7,75.2],[-115.4,76.5],[-109.1,75.5],[-110.5,76.4],[-108.2,76.2]],[[99.9,78.9],[95.0,79.0],[91.2,80.3],[95.9,81.3],[100.2,79.8],[99.9,78.9]],[[174.6,-36.2],[176.8,-37.9],[178.5,-37.7],[175.2,-41.7],[174.9,-39.9],[173.8,-39.5],[174.7,-37.4],[172.6,-34.5],[174.6,-36.2]],[[-68.5,-71.0],[-68.8,-72.2],[-71.1,-72.5],[-75.0,-71.7],[-72.1,-71.2],[-71.7,-69.5],[-70.3,-68.9],[-68.5,-71.0]],[[-67.8,-53.8],[-65.1,-54.7],[-69.2,-55.5],[-74.7,-52.8],[-71.1,-54.1],[-69.3,-52.5],[-67.8,-53.8]],[[108.6,-6.8],[110.8,-6.5],[115.7,-8.4],[105.4,-6.9],[106.1,-5.9],[108.6,-6.8]],[[143.6,50.7],[144.7,49.0],[143.2,49.3],[142.6,47.9],[143.5,46.1],[142.7,46.7],[142.1,46.0],[141.6,51.9],[142.2,54.2],[143.6,50.7]],[[-79.7,22.8],[-74.2,20.3],[-77.8,19.9],[-77.1,20.4],[-78.7,21.6],[-81.8,22.6],[-85.0,21.9],[-82.3,23.2],[-79.7,22.8]],[[143.9,44.2],[145.3,44.4],[145.5,43.3],[143.2,42.0],[141.6,42.7],[141.1,41.6],[140.0,41.6],[139.8,42.6],[141.4,43.4],[142.0,45.6],[143.9,44.2]],[[121.3,18.5],[122.2,18.5],[122.5,17.1],[121.7,14.3],[124.0,13.8],[124.1,12.5],[120.6,13.9],[121.0,14.5],[120.1,15.0],[119.9,16.4],[121.3,18.5]],[[-6.8,52.3],[-10.0,51.8],[-9.2,52.9],[-9.7,53.9],[-6.7,55.2],[-5.7,54.6],[-6.8,52.3]],[[-100.4,73.8],[-97.4,73.8],[-98.1,73.0],[-96.5,72.6],[-96.7,71.7],[-99.3,71.4],[-102.5,72.5],[-100.4,72.7],[-101.5,73.4],[-100.4,73.8]],[[145.1,75.6],[144.3,74.8],[139.0,74.6],[137.0,75.3],[138.8,76.1],[145.1,75.6]],[[126.4,8.4],[125.4,5.6],[124.2,6.2],[123.6,7.8],[121.9,7.2],[123.5,8.7],[125.5,9.0],[125.4,9.8],[126.4,8.4]],[[25.4,80.4],[27.4,80.1],[23.0,79.4],[17.4,80.3],[25.4,80.4]],[[-85.2,65.7],[-80.1,63.7],[-87.2,63.5],[-85.9,65.7],[-85.2,65.7]],[[145.4,-40.8],[148.3,-40.9],[147.9,-43.2],[146.0,-43.5],[144.7,-41.2],[145.4,-40.8]],[[-93.2,72.8],[-95.4,72.1],[-96.0,73.4],[-94.5,74.1],[-90.5,73.9],[-93.2,72.8]],[[-72.6,19.9],[-68.3,18.6],[-70.7,18.4],[-71.4,17.6],[-74.5,18.3],[-72.3,18.7],[-73.4,19.6],[-72.6,19.9]],[[-98.5,76.7],[-97.7,76.3],[-98.2,75.0],[-102.5,75.6],[-102.6,76.3],[-98.5,76.7]],[[-116.2,77.6],[-117.1,76.5],[-122.9,76.1],[-116.2,77.6]]];
+
+/* ---------- currents: [lon, lat] waypoints in flow direction ---------- */
+const CURRENTS = [
+  {name:"North Pacific Current",    short:"N. Pacific C.",  gyre:"NPG", pts:[[155,41],[175,43],[-165,44],[-145,43],[-132,41]]},
+  {name:"Alaska Current",           short:"Alaska",         gyre:"NPG", pts:[[-133,46],[-137,52],[-144,57],[-152,56],[-158,54]]},
+  {name:"California Current",       short:"California",     gyre:"NPG", pts:[[-127,43],[-125,37],[-121,30],[-117,24]]},
+  {name:"Kuroshio Current",         short:"Kuroshio",       gyre:"NPG", pts:[[124,20],[128,25],[135,31],[141,35],[146,39]]},
+  {name:"North Equatorial Current", short:"N. Equatorial",  gyre:"NPG", pts:[[-108,11],[-135,11],[-165,10],[165,9],[145,9]]},
+  {name:"South Equatorial Current", short:"S. Equatorial",  gyre:"SPG", pts:[[-92,-4],[-125,-5],[-160,-5],[168,-5],[150,-5]]},
+  {name:"Peru Current",             short:"Peru",           gyre:"SPG", pts:[[-76,-40],[-73,-30],[-73,-20],[-79,-11],[-84,-5]]},
+  {name:"East Australian Current",  short:"EAC",            gyre:"SPG", pts:[[152,-18],[154,-24],[154,-31],[152,-37],[151,-42]]},
+
+  {name:"Florida Current",          short:"Florida",        gyre:"NAG", pts:[[-85,25],[-83,24],[-81,23.5],[-80,26],[-79.5,30]]},
+  {name:"Gulf Stream",              short:"Gulf Stream",    gyre:"NAG", pts:[[-77,33],[-73,36],[-67,39],[-59,41],[-50,43]]},
+  {name:"North Atlantic Current",   short:"N. Atlantic C.", gyre:"NAG", pts:[[-45,44],[-34,46],[-24,45],[-16,43],[-12,39]]},
+  {name:"Canary Current",           short:"Canary",         gyre:"NAG", pts:[[-13,33],[-16,28],[-19,23],[-21,18]]},
+  {name:"North Equatorial Current", short:"N. Equatorial",  gyre:"NAG", pts:[[-24,10],[-38,10],[-50,11],[-58,12]]},
+  {name:"South Equatorial Current", short:"S. Equatorial",  gyre:"SAG", pts:[[-5,-2],[-15,-3],[-25,-4],[-33,-4]]},
+  {name:"Brazil Current",           short:"Brazil",         gyre:"SAG", pts:[[-36,-13],[-40,-21],[-46,-28],[-53,-35],[-57,-40]]},
+  {name:"Benguela Current",         short:"Benguela",       gyre:"SAG", pts:[[17,-33],[14,-27],[11,-20],[10,-14]]},
+
+  {name:"North Equatorial Current", short:"N. Equatorial",  gyre:"IOG", pts:[[93,4],[84,4],[73,4],[62,4]]},
+  {name:"South Equatorial Current", short:"S. Equatorial",  gyre:"IOG", pts:[[100,-9],[85,-10],[70,-11],[55,-12],[45,-12]]}
+];
+
+/* ---------- green dots: gyres and water bodies ---------- */
+const DOTS = [
+  {name:"North Pacific Gyre",  abbr:"NPG", alt:"North Pacific",  short:"N. Pacific (NPG)",  lon:-175, lat: 27},
+  {name:"North Atlantic Gyre", abbr:"NAG", alt:"North Atlantic", short:"N. Atlantic (NAG)", lon: -45, lat: 28},
+  {name:"South Pacific Gyre",  abbr:"SPG", alt:"South Pacific",  short:"S. Pacific (SPG)",  lon:-130, lat:-30},
+  {name:"South Atlantic Gyre", abbr:"SAG", alt:"South Atlantic", short:"S. Atlantic (SAG)", lon: -16, lat:-27},
+  {name:"Indian Ocean Gyre",   abbr:"IOG", alt:"Indian Ocean",   short:"Indian Oc. (IOG)",  lon:  76, lat:-26},
+
+  {name:"Southern Ocean",      short:"Southern Oc.",  lon:  30, lat:-58},
+  {name:"Mediterranean Sea",   short:"Mediterranean", lon:  17, lat: 35},
+  {name:"Red Sea",             short:"Red Sea",       lon:  38, lat: 20},
+  {name:"Caribbean Sea",       short:"Caribbean",     lon: -75, lat: 15},
+  {name:"Black Sea",           short:"Black Sea",     lon:  34, lat: 43},
+  {name:"Bering Sea",          short:"Bering Sea",    lon:-178, lat: 59},
+  {name:"Caspian Sea",         short:"Caspian Sea",   lon:  51, lat: 42},
+  {name:"Gulf of Mexico",      short:"Gulf of Mex.",  lon: -93, lat: 26},
+  {name:"South China Sea",     short:"S. China Sea",  lon: 114, lat: 14}
+];
+
+/* ---------- maths ---------- */
+const D2R=Math.PI/180, R2D=180/Math.PI, TAU=Math.PI*2;
+function vecOf(lon,lat){const a=lon*D2R,b=lat*D2R,c=Math.cos(b);return [c*Math.cos(a),c*Math.sin(a),Math.sin(b)];}
+function llOf(v){return [Math.atan2(v[1],v[0])*R2D, Math.asin(Math.max(-1,Math.min(1,v[2])))*R2D];}
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+function nrm(v){const m=Math.hypot(v[0],v[1],v[2])||1;return [v[0]/m,v[1]/m,v[2]/m];}
+function crs(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function slerp(a,b,t){
+  const d=Math.max(-1,Math.min(1,dot(a,b))), w=Math.acos(d);
+  if(w<1e-9) return a.slice();
+  const s=Math.sin(w), k1=Math.sin((1-t)*w)/s, k2=Math.sin(t*w)/s;
+  return [a[0]*k1+b[0]*k2, a[1]*k1+b[1]*k2, a[2]*k1+b[2]*k2];
+}
+function densify(pts, stepDeg, closed){
+  const vs=pts.map(p=>vecOf(p[0],p[1]));
+  if(closed) vs.push(vs[0]);
+  const out=[vs[0]];
+  for(let i=0;i<vs.length-1;i++){
+    const a=vs[i], b=vs[i+1];
+    const ang=Math.acos(Math.max(-1,Math.min(1,dot(a,b))))*R2D;
+    const n=Math.max(1,Math.ceil(ang/stepDeg));
+    for(let k=1;k<=n;k++) out.push(slerp(a,b,k/n));
+  }
+  const L=out.length-1;
+  if(closed && Math.abs(out[L][0]-out[0][0])<1e-12 && Math.abs(out[L][1]-out[0][1])<1e-12) out.pop();
+  return out;
+}
+function windingOf(pts){
+  let t=0;
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i], b=pts[(i+1)%pts.length];
+    let dl=(b[0]-a[0]+540)%360-180;
+    t += dl*D2R*(2+Math.sin(a[1]*D2R)+Math.sin(b[1]*D2R));
+  }
+  return t>0?1:-1;
+}
+// continuous longitudes along a path, so nothing jumps the antimeridian
+function unwrap(ll){
+  const out=[[ll[0][0],ll[0][1]]];
+  for(let i=1;i<ll.length;i++){
+    let lon=ll[i][0]; const prev=out[i-1][0];
+    while(lon-prev>180) lon-=360;
+    while(lon-prev<-180) lon+=360;
+    out.push([lon,ll[i][1]]);
+  }
+  return out;
+}
+function spanOf(ll){
+  let lo=Infinity,hi=-Infinity,ls=0;
+  for(const p of ll){ if(p[0]<lo)lo=p[0]; if(p[0]>hi)hi=p[0]; ls+=p[1]; }
+  return {lo,hi,pole: (hi-lo)>350 ? (ls<0?-90:90) : 0};
+}
+
+/* ---------- prebuilt geometry ---------- */
+const landRings = LAND.map(r=>{
+  const vs=densify(r,4,true);
+  const ll=unwrap(vs.map(llOf));
+  const sp=spanOf(ll);
+  return {vs, n:vs.length, wind:windingOf(r), ll, lo:sp.lo, hi:sp.hi, pole:sp.pole,
+          rx:new Float64Array(vs.length), ry:new Float64Array(vs.length),
+          rz:new Float64Array(vs.length), vis:new Uint8Array(vs.length)};
+});
+const currV  = CURRENTS.map(c=>densify(c.pts,1.5,false));
+const currLL = currV.map(vs=>{const ll=unwrap(vs.map(llOf)); const sp=spanOf(ll); ll.lo=sp.lo; ll.hi=sp.hi; return ll;});
+const dotV   = DOTS.map(d=>vecOf(d.lon,d.lat));
+const equatV = (()=>{const o=[];for(let i=0;i<=180;i++)o.push(vecOf(i*2,0));return o;})();
+const meridV = (()=>{const s=[];for(let lo=-180;lo<180;lo+=30){const o=[];for(let la=-90;la<=90;la+=3)o.push(vecOf(lo,la));s.push(o);}return s;})();
+const paralV = (()=>{const s=[];for(const la of [-60,-30,30,60]){const o=[];for(let i=0;i<=180;i++)o.push(vecOf(i*2,la));s.push(o);}return s;})();
+
+/* ---------- view ---------- */
+const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+let mode="globe";
+const view={lam:-155, phi:22};
+const flat={lon0:0};
+let W=0,H=0,CX=0,CY=0,RAD=0,SC=1,MW=0,MH=0;
+let cl=1,sl=0,cp=1,sp=0;
+
+function syncRot(){
+  const l=view.lam*D2R, p=view.phi*D2R;
+  cl=Math.cos(l); sl=Math.sin(l); cp=Math.cos(p); sp=Math.sin(p);
+}
+function proj(v){
+  const x1=v[0]*cl+v[1]*sl, y1=-v[0]*sl+v[1]*cl, z1=v[2];
+  const x2=x1*cp+z1*sp, z2=-x1*sp+z1*cp;
+  return {x:CX+RAD*y1, y:CY-RAD*z2, front:x2>0};
+}
+function unproj(px,py){
+  const y2=(px-CX)/RAD, z2=-(py-CY)/RAD, s=y2*y2+z2*z2;
+  if(s>1) return null;
+  const x2=Math.sqrt(1-s);
+  const x1=x2*cp-z2*sp, z1=x2*sp+z2*cp, y1=y2;
+  return [x1*cl-y1*sl, x1*sl+y1*cl, z1];
+}
+// flat map: x from longitude offset, y from latitude
+const fxOf=(lon,k)=>CX+(lon-flat.lon0+360*k)*SC;
+const fyOf=lat=>CY-lat*SC;
+// which 360-degree copies of a path can land inside the frame
+function copies(lo,hi){
+  const a=Math.floor((-182-(hi-flat.lon0))/360), b=Math.ceil((182-(lo-flat.lon0))/360);
+  const out=[]; for(let k=a;k<=b;k++) out.push(k); return out;
+}
+function resize(){
+  const r=cv.getBoundingClientRect();
+  const dpr=Math.min(2.5, window.devicePixelRatio||1);
+  W=Math.max(1,r.width); H=Math.max(1,r.height);
+  cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  CX=W/2; CY=H/2;
+  RAD=Math.min(W,H)*0.455;
+  SC=Math.min(W/362, H/164); MW=360*SC; MH=160*SC;
+  const fc=document.getElementById("fx");
+  fc.width=Math.round(window.innerWidth*dpr); fc.height=Math.round(window.innerHeight*dpr);
+  fc.getContext("2d").setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+
+/* ---------- land on the globe: clip each ring to the visible hemisphere ---------- */
+function landPathGlobe(L){
+  const n=L.n, rx=L.rx, ry=L.ry, rz=L.rz, vis=L.vis;
+  let nvis=0;
+  for(let i=0;i<n;i++){
+    const v=L.vs[i];
+    const x1=v[0]*cl+v[1]*sl, y1=-v[0]*sl+v[1]*cl, z1=v[2];
+    rx[i]=x1*cp+z1*sp; ry[i]=y1; rz[i]=-x1*sp+z1*cp;
+    vis[i]= rx[i]>0?1:0; nvis+=vis[i];
+  }
+  if(nvis===0) return;
+  if(nvis===n){
+    ctx.moveTo(CX+RAD*ry[0], CY-RAD*rz[0]);
+    for(let i=1;i<n;i++) ctx.lineTo(CX+RAD*ry[i], CY-RAD*rz[i]);
+    ctx.closePath(); return;
+  }
+  function cut(i,j){
+    const t=rx[i]/(rx[i]-rx[j]);
+    let y=ry[i]+t*(ry[j]-ry[i]), z=rz[i]+t*(rz[j]-rz[i]);
+    const m=Math.hypot(y,z)||1; return [y/m,z/m];
+  }
+  let start=-1;
+  for(let i=0;i<n;i++){ if(vis[i] && !vis[(i-1+n)%n]){ start=i; break; } }
+  if(start<0) return;
+  const segs=[]; let cur=null;
+  for(let k=0;k<n;k++){
+    const i=(start+k)%n, j=(i+1)%n;
+    if(vis[i] && !cur){
+      const e=cut((i-1+n)%n,i);
+      cur={a0:Math.atan2(e[1],e[0]), pts:[CX+RAD*e[0], CY-RAD*e[1]]};
+    }
+    if(vis[i]) cur.pts.push(CX+RAD*ry[i], CY-RAD*rz[i]);
+    if(vis[i] && !vis[j]){
+      const e=cut(i,j);
+      cur.pts.push(CX+RAD*e[0], CY-RAD*e[1]);
+      cur.a1=Math.atan2(e[1],e[0]);
+      segs.push(cur); cur=null;
+    }
+  }
+  if(!segs.length) return;
+  const dir = L.wind>0 ? -1 : 1;
+  const used=new Array(segs.length).fill(false);
+  for(let s0=0;s0<segs.length;s0++){
+    if(used[s0]) continue;
+    let s=s0, first=true;
+    for(let guard=0; guard<=segs.length; guard++){
+      used[s]=true;
+      const p=segs[s].pts;
+      if(first){ ctx.moveTo(p[0],p[1]); first=false; } else ctx.lineTo(p[0],p[1]);
+      for(let q=2;q<p.length;q+=2) ctx.lineTo(p[q],p[q+1]);
+      const a1=segs[s].a1;
+      let best=-1,bd=Infinity;
+      for(let t=0;t<segs.length;t++){
+        let d=((segs[t].a0-a1)*dir)%TAU;
+        if(d<0) d+=TAU;
+        if(d<1e-12) d=TAU;
+        if(d<bd){ bd=d; best=t; }
+      }
+      ctx.arc(CX,CY,RAD,-a1,-segs[best].a0, dir>0);
+      if(best===s0){ ctx.closePath(); break; }
+      s=best;
+      if(used[s]){ ctx.closePath(); break; }
+    }
+  }
+}
+function landPathFlat(L){
+  for(const k of copies(L.lo,L.hi)){
+    const ll=L.ll;
+    ctx.moveTo(fxOf(ll[0][0],k), fyOf(ll[0][1]));
+    for(let i=1;i<ll.length;i++) ctx.lineTo(fxOf(ll[i][0],k), fyOf(ll[i][1]));
+    if(L.pole){
+      ctx.lineTo(fxOf(ll[ll.length-1][0],k), fyOf(L.pole));
+      ctx.lineTo(fxOf(ll[0][0],k), fyOf(L.pole));
+    }
+    ctx.closePath();
+  }
+}
+
+/* ---------- drawing ---------- */
+function strokePath(vsOrLL,color,width,dash,isLL,lo,hi){
+  ctx.save();
+  ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap="round"; ctx.lineJoin="round";
+  if(dash) ctx.setLineDash(dash);
+  ctx.beginPath();
+  if(mode==="globe"){
+    let pen=false;
+    for(const v of vsOrLL){
+      const p=proj(v);
+      if(p.front){ pen?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); pen=true; } else pen=false;
+    }
+  }else{
+    for(const k of copies(lo,hi)){
+      const ll=vsOrLL;
+      ctx.moveTo(fxOf(ll[0][0],k), fyOf(ll[0][1]));
+      for(let i=1;i<ll.length;i++) ctx.lineTo(fxOf(ll[i][0],k), fyOf(ll[i][1]));
+    }
+  }
+  ctx.stroke(); ctx.restore();
+}
+const HEAD_AT=[0.36,0.68,1.0];
+function arrowHeads(i,color,size){
+  if(mode==="globe"){
+    const vs=currV[i], n=vs.length;
+    for(const f of HEAD_AT){
+      const k=Math.min(n-1, Math.max(1, Math.round(f*(n-1))));
+      const a=proj(vs[k-1]), b=proj(vs[k]);
+      if(a.front && b.front) head(b.x,b.y,Math.atan2(b.y-a.y,b.x-a.x),color,size);
+    }
+  }else{
+    const ll=currLL[i], n=ll.length;
+    for(const kk of copies(ll.lo,ll.hi)){
+      for(const f of HEAD_AT){
+        const q=Math.min(n-1, Math.max(1, Math.round(f*(n-1))));
+        const bx=fxOf(ll[q][0],kk), by=fyOf(ll[q][1]);
+        const ax=fxOf(ll[q-1][0],kk), ay=fyOf(ll[q-1][1]);
+        if(bx<-40||bx>W+40) continue;
+        head(bx,by,Math.atan2(by-ay,bx-ax),color,size);
+      }
+    }
+  }
+}
+
+function head(x,y,ang,color,size){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(ang);
+  ctx.beginPath();
+  ctx.moveTo(size*1.25,0); ctx.lineTo(-size*0.7,size*0.7);
+  ctx.lineTo(-size*0.28,0); ctx.lineTo(-size*0.7,-size*0.7);
+  ctx.closePath(); ctx.fillStyle=color; ctx.fill(); ctx.restore();
+}
+function chartText(s,x,y,fill,px){
+  ctx.font="italic "+px+"px Georgia, 'Times New Roman', serif";
+  ctx.textAlign="center";
+  ctx.lineWidth=3.2; ctx.strokeStyle="rgba(9,30,44,.9)"; ctx.strokeText(s,x,y);
+  ctx.fillStyle=fill; ctx.fillText(s,x,y);
+}
+const wantNames=()=>document.getElementById("tlabel").checked;
+
+// every on-screen position of a dot, so it can be drawn and clicked in both modes
+function dotScreens(i){
+  if(mode==="globe"){
+    const p=proj(dotV[i]);
+    return p.front?[[p.x,p.y]]:[];
+  }
+  const d=DOTS[i], out=[];
+  for(const k of copies(d.lon,d.lon)){
+    const x=fxOf(d.lon,k);
+    if(x>-30&&x<W+30) out.push([x,fyOf(d.lat)]);
+  }
+  return out;
+}
+
+function draw(){
+  syncRot();
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+
+  if(mode==="globe"){
+    const g=ctx.createRadialGradient(CX-RAD*0.3, CY-RAD*0.35, RAD*0.1, CX, CY, RAD);
+    g.addColorStop(0,"#26688C"); g.addColorStop(0.7,"#1A4763"); g.addColorStop(1,"#0D2B3E");
+    ctx.beginPath(); ctx.arc(CX,CY,RAD,0,TAU); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); ctx.arc(CX,CY,RAD,0,TAU); ctx.clip();
+  }else{
+    ctx.beginPath(); ctx.rect(CX-MW/2, CY-MH/2, MW, MH);
+    ctx.fillStyle="#1A4763"; ctx.fill(); ctx.clip();
+  }
+
+  if(mode==="globe"){
+    for(const m of meridV) strokePath(m,"rgba(126,180,208,.15)",1);
+    for(const p of paralV) strokePath(p,"rgba(126,180,208,.15)",1);
+  }else{
+    ctx.save(); ctx.strokeStyle="rgba(126,180,208,.15)"; ctx.lineWidth=1; ctx.beginPath();
+    for(let lon=-180;lon<180;lon+=30) for(const k of copies(lon,lon)){
+      const x=fxOf(lon,k); ctx.moveTo(x,CY-MH/2); ctx.lineTo(x,CY+MH/2);
+    }
+    for(const la of [-60,-30,30,60]){ const y=fyOf(la); ctx.moveTo(CX-MW/2,y); ctx.lineTo(CX+MW/2,y); }
+    ctx.stroke(); ctx.restore();
+  }
+
+  ctx.beginPath();
+  for(const L of landRings){ mode==="globe" ? landPathGlobe(L) : landPathFlat(L); }
+  ctx.fillStyle="#E6DFCE"; ctx.fill();
+  if(mode!=="globe"){ ctx.strokeStyle="rgba(116,102,76,.6)"; ctx.lineWidth=0.9; ctx.stroke(); }
+
+  // equator
+  if(mode==="globe"){
+    strokePath(equatV,"rgba(150,215,236,.9)",2,[8,7]);
+    const ep=proj(vecOf(view.lam,0));
+    if(ep.front) chartText("Equator", ep.x, ep.y-10, "rgba(186,229,244,.95)", 13);
+  }else{
+    ctx.save(); ctx.strokeStyle="rgba(150,215,236,.9)"; ctx.lineWidth=2; ctx.setLineDash([8,7]);
+    ctx.beginPath(); ctx.moveTo(CX-MW/2,fyOf(0)); ctx.lineTo(CX+MW/2,fyOf(0)); ctx.stroke(); ctx.restore();
+    chartText("Equator", CX, fyOf(0)-10, "rgba(186,229,244,.95)", 13);
+  }
+
+  // currents
+  currLL.forEach((ll,i)=>{
+    const src = mode==="globe" ? currV[i] : ll;
+    strokePath(src,"rgba(10,32,46,.7)",5,null,mode!=="globe",ll.lo,ll.hi);
+    strokePath(src,"#F0A93B",2.4,null,mode!=="globe",ll.lo,ll.hi);
+    arrowHeads(i,"#F0A93B",5.5);
+    if(wantNames()){
+      if(mode==="globe"){
+        const vis=[];
+        for(const v of currV[i]){ const p=proj(v); if(p.front) vis.push(p); }
+        if(vis.length){ const m=vis[Math.floor(vis.length/2)]; chartText(CURRENTS[i].short,m.x,m.y-11,"#FFE2B4",12); }
+      }else{
+        const m=ll[Math.floor(ll.length/2)];
+        for(const k of copies(ll.lo,ll.hi)){
+          const x=fxOf(m[0],k);
+          if(x>-60&&x<W+60) chartText(CURRENTS[i].short,x,fyOf(m[1])-10,"#FFE2B4",12);
+        }
+      }
+    }
+  });
+
+  // green dots
+  DOTS.forEach((d,i)=>{
+    for(const [x,y] of dotScreens(i)){
+      ctx.beginPath(); ctx.arc(x,y,7.5,0,TAU);
+      ctx.fillStyle="rgba(8,28,20,.55)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(x,y,5.2,0,TAU);
+      ctx.fillStyle="#3FD07E"; ctx.fill();
+      ctx.lineWidth=1.4; ctx.strokeStyle="rgba(240,255,246,.85)"; ctx.stroke();
+      if(wantNames()) chartText(d.short, x, y-12, "#B6F2CF", 12);
+    }
+  });
+
+  // the right answer, shown after a miss
+  if(state.reveal){
+    const r=state.reveal;
+    if(r.kind==="current"){
+      const ll=currLL[r.idx], src = mode==="globe" ? currV[r.idx] : ll;
+      strokePath(src,"rgba(6,20,30,.9)",9,null,false,ll.lo,ll.hi);
+      strokePath(src,"#FFFFFF",3.8,null,false,ll.lo,ll.hi);
+      arrowHeads(r.idx,"#FFFFFF",6);
+      if(mode==="globe"){
+        const vis=[];
+        for(const v of currV[r.idx]){ const p=proj(v); if(p.front) vis.push(p); }
+        if(vis.length){ const m=vis[Math.floor(vis.length/2)]; chartText(r.label,m.x,m.y-13,"#FFFFFF",13); }
+      }else{
+        const m=ll[Math.floor(ll.length/2)];
+        for(const k of copies(ll.lo,ll.hi)){
+          const x=fxOf(m[0],k);
+          if(x>-60&&x<W+60) chartText(r.label,x,fyOf(m[1])-12,"#FFFFFF",13);
+        }
+      }
+    }else{
+      for(const [x,y] of dotScreens(r.idx)){
+        ctx.beginPath(); ctx.arc(x,y,13,0,TAU);
+        ctx.lineWidth=3; ctx.strokeStyle="#FFFFFF"; ctx.stroke();
+        chartText(DOTS[r.idx].short, x, y-19, "#FFFFFF", 13);
+      }
+    }
+  }
+
+  ctx.restore();
+  if(mode==="globe"){
+    ctx.beginPath(); ctx.arc(CX,CY,RAD,0,TAU);
+    ctx.strokeStyle="rgba(165,210,234,.32)"; ctx.lineWidth=1.5; ctx.stroke();
+  }else{
+    ctx.beginPath(); ctx.rect(CX-MW/2,CY-MH/2,MW,MH);
+    ctx.strokeStyle="rgba(165,210,234,.32)"; ctx.lineWidth=1.5; ctx.stroke();
+  }
+}
+
+/* ---------- hit testing ---------- */
+function segDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay, d2=dx*dx+dy*dy;
+  if(d2===0) return Math.hypot(px-ax,py-ay);
+  let t=((px-ax)*dx+(py-ay)*dy)/d2;
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+}
+function hitTest(px,py){
+  if(mode==="globe" && !unproj(px,py)) return null;
+  // dots first: they are small explicit markers
+  let bestDot=null, dd=16;
+  DOTS.forEach((d,i)=>{
+    for(const [x,y] of dotScreens(i)){
+      const m=Math.hypot(px-x,py-y);
+      if(m<dd){ dd=m; bestDot={kind:"dot", idx:i}; }
+    }
+  });
+  if(bestDot) return bestDot;
+
+  let best=null, bestD=Math.max(10, (mode==="globe"?RAD:MW/2)*0.032);
+  currLL.forEach((ll,i)=>{
+    if(mode==="globe"){
+      let prev=null;
+      for(const v of currV[i]){
+        const p=proj(v);
+        if(p.front && prev){
+          const m=segDist(px,py,prev.x,prev.y,p.x,p.y);
+          if(m<bestD){ bestD=m; best={kind:"current", idx:i}; }
+        }
+        prev=p.front?p:null;
+      }
+    }else{
+      for(const k of copies(ll.lo,ll.hi)){
+        for(let q=1;q<ll.length;q++){
+          const ax=fxOf(ll[q-1][0],k), ay=fyOf(ll[q-1][1]);
+          const bx=fxOf(ll[q][0],k),   by=fyOf(ll[q][1]);
+          if(Math.max(ax,bx)<-30||Math.min(ax,bx)>W+30) continue;
+          const m=segDist(px,py,ax,ay,bx,by);
+          if(m<bestD){ bestD=m; best={kind:"current", idx:i}; }
+        }
+      }
+    }
+  });
+  return best;
+}
+
+/* ---------- targets and sets ---------- */
+const shared={};
+CURRENTS.forEach(c=>{ shared[c.name]=(shared[c.name]||0)+1; });
+function everyTarget(){
+  const seen=new Set(), out=[];
+  for(const c of CURRENTS){
+    const t = shared[c.name]>1 ? {kind:"current",name:c.name,gyre:c.gyre}
+                               : {kind:"current",name:c.name};
+    const k=t.kind+"|"+t.name+"|"+(t.gyre||"");
+    if(seen.has(k)) continue;
+    seen.add(k); out.push(t);
+  }
+  DOTS.forEach((d,i)=>out.push({kind:"dot",name:d.name,idx:i}));
+  return out;
+}
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    const t=a[i]; a[i]=a[j]; a[j]=t;
+  }
+  return a;
+}
+const state={bag:[], set:[], step:0, cleared:0, live:false, hover:false, reveal:null};
+
+function drawTarget(){
+  if(!state.bag.length) state.bag=shuffle(everyTarget());
+  return state.bag.pop();
+}
+function newSet(randomMode){
+  if(randomMode) setMode(Math.random()<0.5?"globe":"flat", false);
+  // fresh position every set, so the answer is never in the same place twice
+  if(mode==="globe"){
+    view.lam=Math.random()*360-180;
+    view.phi=Math.round(Math.random()*70-30);
+  }else{
+    flat.lon0=Math.round(Math.random()*360-180);
+  }
+  const a=drawTarget();
+  let b=drawTarget(), spare=[];
+  let guard=0;
+  while(b.name===a.name && state.bag.length && guard++<40){
+    spare.push(b); b=drawTarget();
+  }
+  state.bag.push(...spare);
+  for(const t of [a,b]){
+    if(t.kind==="dot" && DOTS[t.idx].alt) t.useAlt = Math.random()<0.5;
+  }
+  state.set=[a,b]; state.step=0; state.live=true; state.reveal=null;
+  hideModal(); showStep(); draw();
+}
+function showStep(){
+  const t=state.set[state.step];
+  const ask=document.getElementById("ask"), sub=document.getElementById("sub");
+  const pos=(state.step+1)+" of 2 — ";
+  if(t.kind==="dot"){
+    const d=DOTS[t.idx];
+    if(d.alt){
+      ask.textContent = "Find the "+(t.useAlt ? d.alt : d.name+" ("+d.abbr+")");
+      sub.textContent = pos+"One dot marks this basin and its gyre.";
+    }else{
+      ask.textContent = "Find the "+d.name;
+      sub.textContent = pos+"Click the green dot.";
+    }
+  }else if(t.gyre){
+    const g=DOTS.find(x=>x.abbr===t.gyre);
+    ask.textContent="Find the "+t.name+" in the "+g.name+" ("+g.abbr+")";
+    sub.textContent=pos+"This current appears in more than one gyre.";
+  }else{
+    ask.textContent="Find the "+t.name;
+    sub.textContent=pos+(mode==="globe"?"Drag to spin the globe. Click the arrow.":"Drag the map sideways. Click the arrow.");
+  }
+}
+function currIndexOf(t){
+  return CURRENTS.findIndex(c=>c.name===t.name && (!t.gyre || c.gyre===t.gyre));
+}
+function dotLabel(i,useAlt){
+  const d=DOTS[i];
+  if(!d.alt) return d.name;
+  return useAlt ? d.alt : d.name+" ("+d.abbr+")";
+}
+function nameOfHit(h){
+  if(h.kind==="dot") return dotLabel(h.idx,false);
+  const c=CURRENTS[h.idx];
+  if(shared[c.name]>1){
+    const g=DOTS.find(x=>x.abbr===c.gyre);
+    return c.name+" in the "+g.name+" ("+g.abbr+")";
+  }
+  return c.name;
+}
+function nameOfTarget(t){
+  if(t.kind==="dot") return dotLabel(t.idx, !!t.useAlt);
+  if(t.gyre){
+    const g=DOTS.find(x=>x.abbr===t.gyre);
+    return t.name+" in the "+g.name+" ("+g.abbr+")";
+  }
+  return t.name;
+}
+function correctFor(t,hit){
+  if(t.kind==="dot") return hit.kind==="dot" && hit.idx===t.idx;
+  if(hit.kind!=="current") return false;
+  const c=CURRENTS[hit.idx];
+  return c.name===t.name && (!t.gyre || c.gyre===t.gyre);
+}
+function wash(kind){
+  const f=document.getElementById("flash");
+  f.className = kind ? "on "+kind : "";
+}
+function judge(hit){
+  if(!state.live || !hit) return;
+  const ok=correctFor(state.set[state.step], hit);
+  state.live=false;
+  wash(ok?"good":"bad");
+  if(!ok){
+    const t=state.set[state.step];
+    state.reveal = t.kind==="dot" ? {kind:"dot", idx:t.idx}
+                                  : {kind:"current", idx:currIndexOf(t), label:CURRENTS[currIndexOf(t)].short};
+    draw();
+    setTimeout(()=>showModal(false, hit), 420);
+    return;
+  }
+  if(state.step===0){
+    setTimeout(()=>{ wash(null); state.reveal=null; state.step=1; state.live=true; showStep(); draw(); }, 700);
+  }else{
+    state.cleared++;
+    document.getElementById("score").innerHTML="<strong>"+state.cleared+"</strong> sets cleared";
+    confetti();
+    setTimeout(()=>showModal(true), 500);
+  }
+}
+
+/* ---------- modal ---------- */
+function showModal(good,hit){
+  const m=document.getElementById("modal");
+  document.getElementById("headline").textContent = good ? "Both correct" : "TRY AGAIN";
+  document.getElementById("note").textContent = good
+    ? "Would you like another set?"
+    : "You clicked the "+nameOfHit(hit)+". The answer was the "
+      +nameOfTarget(state.set[state.step])+", now marked in white.";
+  m.className="on "+(good?"good":"bad");
+  document.getElementById("mnext").focus();
+}
+function hideModal(){ document.getElementById("modal").className=""; wash(null); }
+
+/* ---------- confetti ---------- */
+const fx=document.getElementById("fx"), fxc=fx.getContext("2d");
+let bits=[], fxRun=false;
+const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function confetti(){
+  if(reduce) return;
+  const cols=["#3FD07E","#F0A93B","#7FD4F0","#F4EEDF","#E86A4E"];
+  bits=[];
+  const w=window.innerWidth;
+  for(let i=0;i<130;i++){
+    bits.push({x:Math.random()*w, y:-20-Math.random()*window.innerHeight*0.5,
+      vx:(Math.random()-0.5)*1.1, vy:2+Math.random()*2.6,
+      w:5+Math.random()*6, h:8+Math.random()*7,
+      r:Math.random()*TAU, vr:(Math.random()-0.5)*0.22,
+      c:cols[(Math.random()*cols.length)|0]});
+  }
+  if(!fxRun){ fxRun=true; tick(); }
+}
+function tick(){
+  const w=window.innerWidth, h=window.innerHeight;
+  fxc.clearRect(0,0,w,h);
+  let alive=0;
+  for(const b of bits){
+    b.x+=b.vx; b.y+=b.vy; b.vy+=0.045; b.r+=b.vr;
+    if(b.y<h+30){
+      alive++;
+      fxc.save(); fxc.translate(b.x,b.y); fxc.rotate(b.r);
+      fxc.fillStyle=b.c; fxc.fillRect(-b.w/2,-b.h/2,b.w,b.h); fxc.restore();
+    }
+  }
+  if(alive){ requestAnimationFrame(tick); }
+  else { fxc.clearRect(0,0,w,h); fxRun=false; }
+}
+
+/* ---------- input ---------- */
+let drag=null;
+cv.addEventListener("pointerdown",e=>{
+  cv.setPointerCapture(e.pointerId);
+  drag={x:e.offsetX,y:e.offsetY,lam:view.lam,phi:view.phi,lon0:flat.lon0,moved:0};
+  cv.classList.add("grabbing");
+});
+cv.addEventListener("pointermove",e=>{
+  if(drag){
+    const dx=e.offsetX-drag.x, dy=e.offsetY-drag.y;
+    drag.moved=Math.max(drag.moved,Math.hypot(dx,dy));
+    if(mode==="globe"){
+      const k=86/RAD;
+      view.lam=drag.lam-dx*k;
+      view.phi=Math.max(-89,Math.min(89,drag.phi+dy*k));
+    }else{
+      flat.lon0=((drag.lon0-dx/SC+180)%360+360)%360-180;
+    }
+    draw();
+  }else{
+    syncRot();
+    const h=hitTest(e.offsetX,e.offsetY);
+    if(!!h!==state.hover){ state.hover=!!h; cv.classList.toggle("target",!!h); }
+  }
+});
+cv.addEventListener("pointerup",e=>{
+  cv.classList.remove("grabbing");
+  const click = drag && drag.moved<6;
+  drag=null;
+  if(click){ syncRot(); judge(hitTest(e.offsetX,e.offsetY)); }
+});
+cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("grabbing");});
+cv.addEventListener("keydown",e=>{
+  const step=e.shiftKey?14:6; let used=true;
+  if(e.key==="ArrowLeft"){ mode==="globe"?view.lam+=step:flat.lon0=((flat.lon0-step+180)%360+360)%360-180; }
+  else if(e.key==="ArrowRight"){ mode==="globe"?view.lam-=step:flat.lon0=((flat.lon0+step+180)%360+360)%360-180; }
+  else if(e.key==="ArrowUp" && mode==="globe") view.phi=Math.min(89,view.phi+step);
+  else if(e.key==="ArrowDown" && mode==="globe") view.phi=Math.max(-89,view.phi-step);
+  else used=false;
+  if(used){ e.preventDefault(); draw(); }
+});
+
+function setMode(m,redraw){
+  mode=m;
+  document.getElementById("mode").textContent = m==="globe" ? "Flat map" : "Globe";
+  if(m==="globe"){ view.lam=Math.random()*360-180; view.phi=Math.round(Math.random()*70-30); }
+  else flat.lon0=Math.round(Math.random()*360-180);
+  if(redraw!==false){ showStep(); draw(); }
+}
+document.getElementById("mode").addEventListener("click",()=>setMode(mode==="globe"?"flat":"globe",true));
+document.getElementById("tlabel").addEventListener("change",draw);
+document.getElementById("bnext").addEventListener("click",()=>newSet(false));
+document.getElementById("brand").addEventListener("click",()=>newSet(true));
+document.getElementById("mnext").addEventListener("click",()=>newSet(false));
+document.getElementById("mrand").addEventListener("click",()=>newSet(true));
+window.addEventListener("resize",resize);
+
+state.bag=shuffle(everyTarget());
+newSet(false);
+resize();
+</script>
+</body>
+</html>
