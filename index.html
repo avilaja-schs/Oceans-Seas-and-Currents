@@ -21,15 +21,15 @@
 
   header{flex:0 0 auto;padding:13px 16px 7px;display:flex;justify-content:center;position:relative;z-index:3}
   #panel{
-    background:#F4EEDF;border:1px solid #C6BBA0;border-radius:3px;
+    background:#241B5E;border:1px solid #6C63C0;border-radius:3px;
     padding:10px 22px 9px;max-width:min(700px,94vw);text-align:center;
-    box-shadow:0 6px 26px rgba(0,0,0,.35);
+    box-shadow:0 6px 30px rgba(0,0,0,.45);
   }
   #ask{
     font-family:Georgia,"Times New Roman",serif;font-style:italic;
-    font-size:clamp(17px,2.9vw,28px);line-height:1.2;margin:0;color:#14384F;
+    font-size:clamp(17px,2.9vw,28px);line-height:1.2;margin:0;color:#FFFFFF;
   }
-  #sub{margin:5px 0 0;font-size:12.5px;color:#6C8494}
+  #sub{margin:5px 0 0;font-size:12.5px;color:#B9B2EC}
 
   #wrap{flex:1 1 auto;position:relative;min-height:0}
   canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
@@ -71,21 +71,21 @@
     max-width:min(460px,92vw);box-shadow:0 16px 50px rgba(0,0,0,.5);
   }
   #modal.bad #card{background:#B4291A;border:1px solid #E4705F}
-  #modal.good #card{background:#F4EEDF;border:1px solid #C6BBA0}
+  #modal.good #card{background:#241B5E;border:1px solid #6C63C0}
   #headline{
     font-family:Georgia,"Times New Roman",serif;font-style:italic;
     font-size:clamp(26px,5vw,42px);margin:0;line-height:1.1;
   }
   #modal.bad #headline{color:#fff;font-style:normal;letter-spacing:.06em;font-weight:bold}
-  #modal.good #headline{color:#14384F}
+  #modal.good #headline{color:#FFFFFF}
   #note{margin:9px 0 18px;font-size:14px}
   #modal.bad #note{color:#FFD9D2}
-  #modal.good #note{color:#5C7688}
+  #modal.good #note{color:#B9B2EC}
   #acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   #modal.bad #acts button{color:#fff;border-color:rgba(255,255,255,.6)}
   #modal.bad #acts button:hover{background:rgba(255,255,255,.15)}
-  #modal.good #acts button{color:#14384F;border-color:#B3A78C}
-  #modal.good #acts button:hover{background:#E6DDC7}
+  #modal.good #acts button{color:#FFFFFF;border-color:#7E76C9}
+  #modal.good #acts button:hover{background:rgba(255,255,255,.14)}
 
   @media (prefers-reduced-motion:reduce){#flash{transition:none}}
   @media (max-width:560px){
@@ -249,6 +249,7 @@ let mode="globe";
 const view={lam:-155, phi:22};
 const flat={lon0:0};
 let W=0,H=0,CX=0,CY=0,RAD=0,SC=1,MW=0,MH=0;
+let CW=0,CH=0,DPR=1,rotFlat=false;
 let cl=1,sl=0,cp=1,sp=0;
 
 function syncRot(){
@@ -275,18 +276,27 @@ function copies(lo,hi){
   const a=Math.floor((-182-(hi-flat.lon0))/360), b=Math.ceil((182-(lo-flat.lon0))/360);
   const out=[]; for(let k=a;k<=b;k++) out.push(k); return out;
 }
-function resize(){
-  const r=cv.getBoundingClientRect();
-  const dpr=Math.min(2.5, window.devicePixelRatio||1);
-  W=Math.max(1,r.width); H=Math.max(1,r.height);
-  cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+// on a tall screen the flat map is turned a quarter turn so it runs down the
+// long axis; the globe is a circle and never needs it
+function layout(){
+  rotFlat = (mode==="flat" && CH > CW*1.05);
+  W = rotFlat ? CH : CW;
+  H = rotFlat ? CW : CH;
   CX=W/2; CY=H/2;
   RAD=Math.min(W,H)*0.455;
   SC=Math.min(W/362, H/164); MW=360*SC; MH=160*SC;
+}
+// screen pixels -> map space
+function toMap(px,py){ return rotFlat ? [py, CW-px] : [px,py]; }
+function resize(){
+  const r=cv.getBoundingClientRect();
+  DPR=Math.min(2.5, window.devicePixelRatio||1);
+  CW=Math.max(1,r.width); CH=Math.max(1,r.height);
+  cv.width=Math.round(CW*DPR); cv.height=Math.round(CH*DPR);
+  layout();
   const fc=document.getElementById("fx");
-  fc.width=Math.round(window.innerWidth*dpr); fc.height=Math.round(window.innerHeight*dpr);
-  fc.getContext("2d").setTransform(dpr,0,0,dpr,0,0);
+  fc.width=Math.round(window.innerWidth*DPR); fc.height=Math.round(window.innerHeight*DPR);
+  fc.getContext("2d").setTransform(DPR,0,0,DPR,0,0);
   draw();
 }
 
@@ -443,7 +453,9 @@ function dotScreens(i){
 
 function draw(){
   syncRot();
-  ctx.clearRect(0,0,W,H);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,CW,CH);
+  if(rotFlat){ ctx.translate(CW,0); ctx.rotate(Math.PI/2); }
   ctx.save();
 
   if(mode==="globe"){
@@ -795,12 +807,15 @@ cv.addEventListener("pointermove",e=>{
       view.lam=drag.lam-dx*k;
       view.phi=Math.max(-89,Math.min(89,drag.phi+dy*k));
     }else{
-      flat.lon0=((drag.lon0-dx/SC+180)%360+360)%360-180;
+      // when the map is turned, its east-west axis runs down the screen
+      const along = rotFlat ? dy : dx;
+      flat.lon0=((drag.lon0-along/SC+180)%360+360)%360-180;
     }
     draw();
   }else{
     syncRot();
-    const h=hitTest(e.offsetX,e.offsetY);
+    const p=toMap(e.offsetX,e.offsetY);
+    const h=hitTest(p[0],p[1]);
     if(!!h!==state.hover){ state.hover=!!h; cv.classList.toggle("target",!!h); }
   }
 });
@@ -808,15 +823,17 @@ cv.addEventListener("pointerup",e=>{
   cv.classList.remove("grabbing");
   const click = drag && drag.moved<6;
   drag=null;
-  if(click){ syncRot(); judge(hitTest(e.offsetX,e.offsetY)); }
+  if(click){ syncRot(); const p=toMap(e.offsetX,e.offsetY); judge(hitTest(p[0],p[1])); }
 });
 cv.addEventListener("pointercancel",()=>{drag=null;cv.classList.remove("grabbing");});
 cv.addEventListener("keydown",e=>{
   const step=e.shiftKey?14:6; let used=true;
   if(e.key==="ArrowLeft"){ mode==="globe"?view.lam+=step:flat.lon0=((flat.lon0-step+180)%360+360)%360-180; }
   else if(e.key==="ArrowRight"){ mode==="globe"?view.lam-=step:flat.lon0=((flat.lon0+step+180)%360+360)%360-180; }
-  else if(e.key==="ArrowUp" && mode==="globe") view.phi=Math.min(89,view.phi+step);
-  else if(e.key==="ArrowDown" && mode==="globe") view.phi=Math.max(-89,view.phi-step);
+  else if(e.key==="ArrowUp") { if(mode==="globe") view.phi=Math.min(89,view.phi+step);
+    else flat.lon0=((flat.lon0-step+180)%360+360)%360-180; }
+  else if(e.key==="ArrowDown") { if(mode==="globe") view.phi=Math.max(-89,view.phi-step);
+    else flat.lon0=((flat.lon0+step+180)%360+360)%360-180; }
   else used=false;
   if(used){ e.preventDefault(); draw(); }
 });
@@ -826,6 +843,7 @@ function setMode(m,redraw){
   document.getElementById("mode").textContent = m==="globe" ? "Flat map" : "Globe";
   if(m==="globe"){ view.lam=Math.random()*360-180; view.phi=Math.round(Math.random()*70-30); }
   else flat.lon0=Math.round(Math.random()*360-180);
+  layout();
   if(redraw!==false){ showStep(); draw(); }
 }
 document.getElementById("mode").addEventListener("click",()=>setMode(mode==="globe"?"flat":"globe",true));
@@ -835,6 +853,7 @@ document.getElementById("brand").addEventListener("click",()=>newSet(true));
 document.getElementById("mnext").addEventListener("click",()=>newSet(false));
 document.getElementById("mrand").addEventListener("click",()=>newSet(true));
 window.addEventListener("resize",resize);
+window.addEventListener("orientationchange",()=>{ setTimeout(resize,120); setTimeout(resize,400); });
 
 state.bag=shuffle(everyTarget());
 newSet(false);
