@@ -51,6 +51,13 @@
     border:1px solid var(--rule);border-radius:2px;padding:6px 13px;cursor:pointer;
   }
   button:hover{background:#173C53;border-color:#5A90AE}
+  .seg{display:inline-flex}
+  .seg button{border-radius:0;margin-left:-1px}
+  .seg button:first-child{border-radius:2px 0 0 2px;margin-left:0}
+  .seg button:last-child{border-radius:0 2px 2px 0}
+  .seg button.on,.seg button.on:hover{
+    background:#241B5E;border-color:#6C63C0;color:#fff;position:relative;z-index:1;
+  }
   button:focus-visible,label.tog input:focus-visible{outline:2px solid #FFCE7A;outline-offset:2px}
 
   /* colour wash over the map, map still readable */
@@ -108,6 +115,10 @@
   <footer>
     <span id="score"><strong>0</strong> sets cleared</span>
     <span class="spacer"></span>
+    <span class="seg">
+      <button id="sall" type="button" class="on">Everything</button>
+      <button id="sdots" type="button">Oceans &amp; seas</button>
+    </span>
     <button id="mode">Flat map</button>
     <label class="tog"><input type="checkbox" id="tlabel"> Names</label>
     <button id="bnext">Next set</button>
@@ -617,9 +628,10 @@ function hitTest(px,py){
 /* ---------- targets and sets ---------- */
 const shared={};
 CURRENTS.forEach(c=>{ shared[c.name]=(shared[c.name]||0)+1; });
+let scope="all";
 function everyTarget(){
   const seen=new Set(), out=[];
-  for(const c of CURRENTS){
+  if(scope==="all") for(const c of CURRENTS){
     const t = shared[c.name]>1 ? {kind:"current",name:c.name,gyre:c.gyre}
                                : {kind:"current",name:c.name};
     const k=t.kind+"|"+t.name+"|"+(t.gyre||"");
@@ -628,6 +640,14 @@ function everyTarget(){
   }
   DOTS.forEach((d,i)=>out.push({kind:"dot",name:d.name,idx:i}));
   return out;
+}
+function setScope(s){
+  if(scope===s) return;
+  scope=s;
+  document.getElementById("sall").className  = s==="all"  ? "on" : "";
+  document.getElementById("sdots").className = s==="dots" ? "on" : "";
+  state.bag=shuffle(everyTarget());
+  newSet(false);
 }
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){
@@ -846,6 +866,8 @@ function setMode(m,redraw){
   layout();
   if(redraw!==false){ showStep(); draw(); }
 }
+document.getElementById("sall").addEventListener("click",()=>setScope("all"));
+document.getElementById("sdots").addEventListener("click",()=>setScope("dots"));
 document.getElementById("mode").addEventListener("click",()=>setMode(mode==="globe"?"flat":"globe",true));
 document.getElementById("tlabel").addEventListener("change",draw);
 document.getElementById("bnext").addEventListener("click",()=>newSet(false));
