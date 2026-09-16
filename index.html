@@ -55,6 +55,7 @@
   .seg button{border-radius:0;margin-left:-1px}
   .seg button:first-child{border-radius:2px 0 0 2px;margin-left:0}
   .seg button:last-child{border-radius:0 2px 2px 0}
+  .seg button+button+button{margin-left:-1px}
   .seg button.on,.seg button.on:hover{
     background:#241B5E;border-color:#6C63C0;color:#fff;position:relative;z-index:1;
   }
@@ -117,6 +118,7 @@
     <span class="spacer"></span>
     <span class="seg">
       <button id="sall" type="button" class="on">Everything</button>
+      <button id="scurr" type="button">Currents</button>
       <button id="sdots" type="button">Oceans &amp; seas</button>
     </span>
     <button id="mode">Flat map</button>
@@ -631,21 +633,22 @@ CURRENTS.forEach(c=>{ shared[c.name]=(shared[c.name]||0)+1; });
 let scope="all";
 function everyTarget(){
   const seen=new Set(), out=[];
-  if(scope==="all") for(const c of CURRENTS){
+  if(scope!=="dots") for(const c of CURRENTS){
     const t = shared[c.name]>1 ? {kind:"current",name:c.name,gyre:c.gyre}
                                : {kind:"current",name:c.name};
     const k=t.kind+"|"+t.name+"|"+(t.gyre||"");
     if(seen.has(k)) continue;
     seen.add(k); out.push(t);
   }
-  DOTS.forEach((d,i)=>out.push({kind:"dot",name:d.name,idx:i}));
+  if(scope!=="currents") DOTS.forEach((d,i)=>out.push({kind:"dot",name:d.name,idx:i}));
   return out;
 }
 function setScope(s){
   if(scope===s) return;
   scope=s;
-  document.getElementById("sall").className  = s==="all"  ? "on" : "";
-  document.getElementById("sdots").className = s==="dots" ? "on" : "";
+  document.getElementById("sall").className  = s==="all"      ? "on" : "";
+  document.getElementById("scurr").className = s==="currents" ? "on" : "";
+  document.getElementById("sdots").className = s==="dots"     ? "on" : "";
   state.bag=shuffle(everyTarget());
   newSet(false);
 }
@@ -674,7 +677,7 @@ function newSet(randomMode){
   const a=drawTarget();
   let b=drawTarget(), spare=[];
   let guard=0;
-  while(b.name===a.name && state.bag.length && guard++<40){
+  while(b.name===a.name && guard++<40){
     spare.push(b); b=drawTarget();
   }
   state.bag.push(...spare);
@@ -867,6 +870,7 @@ function setMode(m,redraw){
   if(redraw!==false){ showStep(); draw(); }
 }
 document.getElementById("sall").addEventListener("click",()=>setScope("all"));
+document.getElementById("scurr").addEventListener("click",()=>setScope("currents"));
 document.getElementById("sdots").addEventListener("click",()=>setScope("dots"));
 document.getElementById("mode").addEventListener("click",()=>setMode(mode==="globe"?"flat":"globe",true));
 document.getElementById("tlabel").addEventListener("change",draw);
